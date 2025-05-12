@@ -1073,15 +1073,69 @@ def handle_year_from_selection(call):
     print(f"✅ DEBUG [handle_year_from_selection] - Данные user_search_data:")
     print(json.dumps(user_search_data[user_id], indent=2, ensure_ascii=False))
 
+    # Показываем выбор месяца для начального года
+    month_markup = types.InlineKeyboardMarkup(row_width=3)
+
+    # Добавляем опцию "Любой месяц"
+    month_markup.add(
+        types.InlineKeyboardButton(
+            "Любой месяц", callback_data=f"month_from_{year_from}_0"
+        )
+    )
+
+    # Добавляем все месяцы (1-12)
+    for month in range(1, 13):
+        month_name = [
+            "Январь",
+            "Февраль",
+            "Март",
+            "Апрель",
+            "Май",
+            "Июнь",
+            "Июль",
+            "Август",
+            "Сентябрь",
+            "Октябрь",
+            "Ноябрь",
+            "Декабрь",
+        ][month - 1]
+        month_markup.add(
+            types.InlineKeyboardButton(
+                f"{month_name}", callback_data=f"month_from_{year_from}_{month}"
+            )
+        )
+
+    # Сообщение о выборе месяца
+    bot.edit_message_text(
+        f"Выбран начальный год: {year_from}\nВыберите начальный месяц:",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        reply_markup=month_markup,
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("month_from_"))
+def handle_month_from_selection(call):
+    # Парсим данные из callback_data
+    parts = call.data.split("_")
+    year_from = int(parts[2])
+    month_from = int(parts[3])
+
+    user_id = call.from_user.id
+    if user_id not in user_search_data:
+        user_search_data[user_id] = {}
+
+    # Сохраняем месяц начала
+    user_search_data[user_id]["month_from"] = month_from
+
     # Получаем конечный год периода выпуска поколения из сохраненных данных
     model_end_year = user_search_data[user_id].get("year_to", datetime.now().year)
     current_year = datetime.now().year
 
-    print(f"✅ DEBUG [handle_year_from_selection] - Год начала выбран: {year_from}")
+    print(f"✅ DEBUG [handle_month_from_selection] - Выбран месяц начала: {month_from}")
     print(
-        f"✅ DEBUG [handle_year_from_selection] - Год окончания поколения: {model_end_year}"
+        f"✅ DEBUG [handle_month_from_selection] - Год окончания поколения: {model_end_year}"
     )
-    print(f"✅ DEBUG [handle_year_from_selection] - Текущий год: {current_year}")
 
     # Формируем диапазон лет от выбранного года до конца производства поколения или текущего года
     year_markup = types.InlineKeyboardMarkup(row_width=4)
@@ -1092,14 +1146,14 @@ def handle_year_from_selection(call):
     if year_from >= end_limit:
         # Если выбранный год начала >= году окончания, показываем только этот год
         print(
-            f"⚠️ DEBUG [handle_year_from_selection] - Год начала >= году окончания, показываем только {year_from}"
+            f"⚠️ DEBUG [handle_month_from_selection] - Год начала >= году окончания, показываем только {year_from}"
         )
         year_range = [year_from]
     else:
         year_range = range(year_from, end_limit)
 
     print(
-        f"✅ DEBUG [handle_year_from_selection] - Предлагаемые годы для выбора to: {list(year_range)}"
+        f"✅ DEBUG [handle_month_from_selection] - Предлагаемые годы для выбора to: {list(year_range)}"
     )
 
     for y in year_range:
@@ -1107,11 +1161,31 @@ def handle_year_from_selection(call):
             types.InlineKeyboardButton(str(y), callback_data=f"year_to_{year_from}_{y}")
         )
 
+    # Отображаем информацию о выбранном месяце в сообщении
+    month_name = (
+        "любой"
+        if month_from == 0
+        else [
+            "январь",
+            "февраль",
+            "март",
+            "апрель",
+            "май",
+            "июнь",
+            "июль",
+            "август",
+            "сентябрь",
+            "октябрь",
+            "ноябрь",
+            "декабрь",
+        ][month_from - 1]
+    )
+
     # Добавляем информацию о периоде выпуска модели
     model_period_info = f"Период выпуска модели: {user_search_data[user_id].get('year_from')}-{model_end_year}"
 
     bot.edit_message_text(
-        f"Начальный год: {year_from}\n{model_period_info}\nТеперь выберите конечный год:",
+        f"Начальная дата: {year_from} год, {month_name}\n{model_period_info}\nТеперь выберите конечный год:",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         reply_markup=year_markup,
@@ -1129,12 +1203,108 @@ def handle_year_to_selection(call):
     # Сохраняем год окончания, сохраняя остальные данные
     user_search_data[user_id].update({"year_to": year_to})
 
-    print(
-        f"✅ DEBUG [handle_year_to_selection] - Выбран диапазон годов: {year_from}-{year_to}"
-    )
+    print(f"✅ DEBUG [handle_year_to_selection] - Выбран конечный год: {year_to}")
     print(f"✅ DEBUG [handle_year_to_selection] - Данные user_search_data:")
     print(json.dumps(user_search_data[user_id], indent=2, ensure_ascii=False))
 
+    # Показываем выбор месяца для конечного года
+    month_markup = types.InlineKeyboardMarkup(row_width=3)
+
+    # Добавляем опцию "Любой месяц"
+    month_markup.add(
+        types.InlineKeyboardButton(
+            "Любой месяц", callback_data=f"month_to_{year_from}_{year_to}_0"
+        )
+    )
+
+    # Добавляем все месяцы (1-12)
+    for month in range(1, 13):
+        month_name = [
+            "Январь",
+            "Февраль",
+            "Март",
+            "Апрель",
+            "Май",
+            "Июнь",
+            "Июль",
+            "Август",
+            "Сентябрь",
+            "Октябрь",
+            "Ноябрь",
+            "Декабрь",
+        ][month - 1]
+        month_markup.add(
+            types.InlineKeyboardButton(
+                f"{month_name}", callback_data=f"month_to_{year_from}_{year_to}_{month}"
+            )
+        )
+
+    bot.edit_message_text(
+        f"Начальный год: {year_from}\nКонечный год: {year_to}\nВыберите конечный месяц:",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        reply_markup=month_markup,
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("month_to_"))
+def handle_month_to_selection(call):
+    # Парсим данные из callback_data
+    parts = call.data.split("_")
+    year_from = int(parts[2])
+    year_to = int(parts[3])
+    month_to = int(parts[4])
+
+    user_id = call.from_user.id
+    if user_id not in user_search_data:
+        user_search_data[user_id] = {}
+
+    # Сохраняем месяц окончания
+    user_search_data[user_id]["month_to"] = month_to
+
+    # Получаем данные о начальном месяце
+    month_from = user_search_data[user_id].get("month_from", 0)
+
+    # Преобразуем названия месяцев для отображения
+    month_from_name = (
+        "любой"
+        if month_from == 0
+        else [
+            "январь",
+            "февраль",
+            "март",
+            "апрель",
+            "май",
+            "июнь",
+            "июль",
+            "август",
+            "сентябрь",
+            "октябрь",
+            "ноябрь",
+            "декабрь",
+        ][month_from - 1]
+    )
+
+    month_to_name = (
+        "любой"
+        if month_to == 0
+        else [
+            "январь",
+            "февраль",
+            "март",
+            "апрель",
+            "май",
+            "июнь",
+            "июль",
+            "август",
+            "сентябрь",
+            "октябрь",
+            "ноябрь",
+            "декабрь",
+        ][month_to - 1]
+    )
+
+    # Показываем выбор пробега
     mileage_markup = types.InlineKeyboardMarkup(row_width=4)
     for value in range(0, 200001, 10000):
         mileage_markup.add(
@@ -1143,8 +1313,13 @@ def handle_year_to_selection(call):
             )
         )
 
+    # Отображаем полный выбранный диапазон дат
+    date_range_text = (
+        f"с {year_from} года ({month_from_name}) по {year_to} год ({month_to_name})"
+    )
+
     bot.edit_message_text(
-        f"Диапазон годов: {year_from}-{year_to}\nТеперь выберите минимальный пробег:",
+        f"Выбран диапазон дат: {date_range_text}\nТеперь выберите минимальный пробег:",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         reply_markup=mileage_markup,
@@ -1320,7 +1495,8 @@ def handle_color_selection(call):
     threading.Thread(
         target=check_for_new_cars,
         args=(
-            call.message.chat.id,
+            call.from_user.id,  # user_id для параметров поиска
+            call.message.chat.id,  # chat_id для отправки сообщений
             manufacturer.strip(),
             model_group.strip(),
             model.strip(),
@@ -1361,6 +1537,7 @@ def build_encar_url(
     mileage_from,
     mileage_to,
     color,
+    user_id=None,  # Добавляем user_id как параметр
 ):
     if not all(
         [manufacturer.strip(), model_group.strip(), model.strip(), trim.strip()]
@@ -1368,19 +1545,42 @@ def build_encar_url(
         print("❌ Не переданы необходимые параметры для построения URL")
         return ""
 
-    # Convert years to format YYYYMM
-    # Encar API expects format: from = YYYY00 (January), to = YYYY99 (December)
+    # Всегда выводим диагностическую информацию для отладки
     print(f"🔧 DEBUG [build_encar_url] - Исходные годы: from={year_from}, to={year_to}")
+    print(f"🔧 DEBUG [build_encar_url] - Используем user_id: {user_id}")
 
-    # Для начального года используем "00" (январь)
-    year_from_formatted = f"{year_from}00"
+    # Объявляем переменные сразу для дальнейшего логирования
+    month_from = 0
+    month_to = 0
 
-    # Для конечного года используем "12" (декабрь)
-    # Если year_from == year_to, то берем тот же год но до декабря
-    year_to_formatted = f"{year_to}12"
+    # Пытаемся получить месяцы из данных пользователя
+    if user_id is not None and user_id in user_search_data:
+        month_from = user_search_data[user_id].get("month_from", 0)
+        month_to = user_search_data[user_id].get("month_to", 0)
 
+        print(
+            f"🔧 DEBUG [build_encar_url] - Месяцы из данных пользователя: from={month_from}, to={month_to}"
+        )
+    else:
+        print("🔧 DEBUG [build_encar_url] - Не удалось получить данные пользователя")
+
+    # ВСЕГДА форматируем с месяцами (даже если user_id не найден)
+    # Эта секция кода будет выполняться независимо от наличия user_id
+    if month_from == 0:  # Any month selected for start
+        year_from_formatted = f"{year_from}00"
+    else:
+        # Используем двузначное представление месяца
+        year_from_formatted = f"{year_from}{month_from:02d}"
+
+    if month_to == 0:  # Any month selected for end
+        year_to_formatted = f"{year_to}12"
+    else:
+        # Используем двузначное представление месяца
+        year_to_formatted = f"{year_to}{month_to:02d}"
+
+    # Проверяем финальный результат
     print(
-        f"🔧 DEBUG [build_encar_url] - Отформатированные годы: from={year_from_formatted}, to={year_to_formatted}"
+        f"🔧 DEBUG [build_encar_url] - Отформатированные даты: от {year_from_formatted} до {year_to_formatted}"
     )
 
     # Подготавливаем имя модели - добавляем '_' после кода модели
@@ -1434,7 +1634,8 @@ def build_encar_url(
 
 
 def check_for_new_cars(
-    chat_id,
+    user_id,  # Переименовываем параметр в user_id
+    chat_id,  # Добавляем отдельный параметр chat_id для отправки сообщений
     manufacturer,
     model_group,
     model,
@@ -1455,6 +1656,7 @@ def check_for_new_cars(
         mileage_from,
         mileage_to,
         color,
+        user_id=user_id,  # Используем user_id для получения параметров
     )
 
     while True:
