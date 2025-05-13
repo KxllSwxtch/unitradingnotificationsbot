@@ -960,21 +960,6 @@ def handle_trim_selection(call):
     if user_id not in user_search_data:
         user_search_data[user_id] = {}
 
-    # Получаем годы начала и конца поколения из сохраненных данных
-    start_year = user_search_data[user_id].get("year_from", datetime.now().year - 10)
-    end_year = user_search_data[user_id].get("year_to", datetime.now().year)
-
-    # Отладочная информация о годах
-    print(
-        f"✅ DEBUG [handle_trim_selection] - Получены годы из данных: year_from={start_year}, year_to={end_year}"
-    )
-
-    # Дополнительно выводим все сохраненные данные пользователя для отладки
-    print(f"✅ DEBUG [handle_trim_selection] - Полные данные пользователя:")
-    for key, value in user_search_data[user_id].items():
-        print(f"  {key}: {value}")
-
-    # Сохраняем trim
     user_search_data[user_id]["trim"] = trim_kr.strip()
 
     print(
@@ -982,26 +967,19 @@ def handle_trim_selection(call):
     )
     print(json.dumps(user_search_data[user_id], indent=2, ensure_ascii=False))
 
+    # Use fixed year range from 2000 to current year instead of using API data
     year_markup = types.InlineKeyboardMarkup(row_width=4)
     current_year = datetime.now().year
 
-    # Определяем диапазон лет для выбора
-    # Ограничиваем конечный год текущим годом для адекватности выбора
-    year_range = range(start_year, min(end_year + 1, current_year + 1))
-
-    # Проверяем, не пустой ли диапазон (для безопасности)
-    if not list(year_range):
-        print(
-            f"⚠️ DEBUG [handle_trim_selection] - Пустой диапазон годов, используем запасной вариант"
-        )
-        year_range = range(max(current_year - 10, start_year), current_year + 1)
+    # Fixed range from 2000 to current year
+    year_range = list(range(2000, current_year + 1))
 
     print(
-        f"✅ DEBUG [handle_trim_selection] - Формируем кнопки для годов: {list(year_range)}"
+        f"✅ DEBUG [handle_trim_selection] - Формируем кнопки для годов: {year_range}"
     )
 
-    # Формируем кнопки с годами для выбора
-    for y in year_range:
+    # Create buttons for each year in reversed order (newest first)
+    for y in reversed(year_range):
         year_markup.add(
             types.InlineKeyboardButton(str(y), callback_data=f"year_from_{y}")
         )
@@ -1048,11 +1026,8 @@ def handle_trim_selection(call):
     translated_trim_eng = translate_smartly(trim_eng)
     translated_trim_kr = translate_smartly(trim_kr)
 
-    # Формируем информационный текст о периоде выпуска
-    year_period_text = f"Годы выпуска модели: {start_year}-{end_year}"
-
     bot.edit_message_text(
-        f"Марка: {brand_eng.strip()} ({brand_kr})\nМодель: {model_eng} ({model_kr})\nПоколение: {generation_eng} ({generation_kr})\nКомплектация: {translated_trim_eng} ({translated_trim_kr})\n{year_period_text}\n\nВыберите начальный год выпуска:",
+        f"Марка: {brand_eng.strip()} ({brand_kr})\nМодель: {model_eng} ({model_kr})\nПоколение: {generation_eng} ({generation_kr})\nКомплектация: {translated_trim_eng} ({translated_trim_kr})\n\nВыберите начальный год выпуска:",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         reply_markup=year_markup,
@@ -1061,56 +1036,35 @@ def handle_trim_selection(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("year_from_"))
 def handle_year_from_selection(call):
-    year_from = int(call.data.split("_")[2])
+    selected_year = int(call.data.split("_")[2])
+
     user_id = call.from_user.id
     if user_id not in user_search_data:
         user_search_data[user_id] = {}
 
-    # Сохраняем год начала, сохраняя остальные данные
-    user_search_data[user_id].update({"year_from": year_from})
+    user_search_data[user_id]["year_from"] = selected_year
 
-    print(f"✅ DEBUG [handle_year_from_selection] - Выбран год начала: {year_from}")
-    print(f"✅ DEBUG [handle_year_from_selection] - Данные user_search_data:")
-    print(json.dumps(user_search_data[user_id], indent=2, ensure_ascii=False))
+    # Create markup with years from selected_year to current_year
+    to_year_markup = types.InlineKeyboardMarkup(row_width=4)
+    current_year = datetime.now().year
 
-    # Показываем выбор месяца для начального года
-    month_markup = types.InlineKeyboardMarkup(row_width=3)
+    # Use range from selected_year to current_year for "year to" selection
+    available_years = list(range(selected_year, current_year + 1))
 
-    # Добавляем опцию "Любой месяц"
-    month_markup.add(
-        types.InlineKeyboardButton(
-            "Любой месяц", callback_data=f"month_from_{year_from}_0"
-        )
-    )
-
-    # Добавляем все месяцы (1-12)
-    for month in range(1, 13):
-        month_name = [
-            "Январь",
-            "Февраль",
-            "Март",
-            "Апрель",
-            "Май",
-            "Июнь",
-            "Июль",
-            "Август",
-            "Сентябрь",
-            "Октябрь",
-            "Ноябрь",
-            "Декабрь",
-        ][month - 1]
-        month_markup.add(
-            types.InlineKeyboardButton(
-                f"{month_name}", callback_data=f"month_from_{year_from}_{month}"
-            )
+    # Create buttons for each year in reversed order (newest first)
+    for y in reversed(available_years):
+        to_year_markup.add(
+            types.InlineKeyboardButton(str(y), callback_data=f"year_to_{y}")
         )
 
-    # Сообщение о выборе месяца
+    message_text = call.message.text
+    new_message_text = "\n".join(message_text.split("\n")[:-1])
+
     bot.edit_message_text(
-        f"Выбран начальный год: {year_from}\nВыберите начальный месяц:",
+        f"{new_message_text}\n\nВыбран начальный год: {selected_year}\nВыберите конечный год выпуска:",
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        reply_markup=month_markup,
+        reply_markup=to_year_markup,
     )
 
 
@@ -1194,56 +1148,56 @@ def handle_month_from_selection(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("year_to_"))
 def handle_year_to_selection(call):
-    year_from = int(call.data.split("_")[2])
-    year_to = int(call.data.split("_")[3])
+    selected_year = int(call.data.split("_")[2])
+
     user_id = call.from_user.id
     if user_id not in user_search_data:
         user_search_data[user_id] = {}
 
-    # Сохраняем год окончания, сохраняя остальные данные
-    user_search_data[user_id].update({"year_to": year_to})
+    user_search_data[user_id]["year_to"] = selected_year
 
-    print(f"✅ DEBUG [handle_year_to_selection] - Выбран конечный год: {year_to}")
-    print(f"✅ DEBUG [handle_year_to_selection] - Данные user_search_data:")
-    print(json.dumps(user_search_data[user_id], indent=2, ensure_ascii=False))
+    # Now we'll proceed directly to the next step (price or location selection)
+    year_from = user_search_data[user_id].get("year_from")
 
-    # Показываем выбор месяца для конечного года
-    month_markup = types.InlineKeyboardMarkup(row_width=3)
+    # Display the entire search parameters
+    message_text = call.message.text
+    base_text = "\n".join(message_text.split("\n")[:-2])
 
-    # Добавляем опцию "Любой месяц"
-    month_markup.add(
-        types.InlineKeyboardButton(
-            "Любой месяц", callback_data=f"month_to_{year_from}_{year_to}_0"
-        )
+    handle_process_with_years(
+        call.message.chat.id,
+        call.message.message_id,
+        base_text,
+        year_from,
+        selected_year,
     )
 
-    # Добавляем все месяцы (1-12)
-    for month in range(1, 13):
-        month_name = [
-            "Январь",
-            "Февраль",
-            "Март",
-            "Апрель",
-            "Май",
-            "Июнь",
-            "Июль",
-            "Август",
-            "Сентябрь",
-            "Октябрь",
-            "Ноябрь",
-            "Декабрь",
-        ][month - 1]
-        month_markup.add(
-            types.InlineKeyboardButton(
-                f"{month_name}", callback_data=f"month_to_{year_from}_{year_to}_{month}"
-            )
-        )
+
+def handle_process_with_years(chat_id, message_id, base_text, year_from, year_to):
+    # Continue with the search flow, directly after year selection
+    price_markup = types.InlineKeyboardMarkup(row_width=2)
+
+    # Price selection buttons
+    price_options = [
+        ("Любая", "any_price"),
+        ("До 10 млн ₩", "price_max_10000000"),
+        ("До 15 млн ₩", "price_max_15000000"),
+        ("До 20 млн ₩", "price_max_20000000"),
+        ("До 25 млн ₩", "price_max_25000000"),
+        ("До 30 млн ₩", "price_max_30000000"),
+        ("До 35 млн ₩", "price_max_35000000"),
+        ("До 40 млн ₩", "price_max_40000000"),
+        ("До 50 млн ₩", "price_max_50000000"),
+        ("Свой диапазон", "custom_price"),
+    ]
+
+    for label, callback_data in price_options:
+        price_markup.add(types.InlineKeyboardButton(label, callback_data=callback_data))
 
     bot.edit_message_text(
-        f"Начальный год: {year_from}\nКонечный год: {year_to}\nВыберите конечный месяц:",
-        chat_id=call.message.chat.id,
-        message_id=call.message.message_id,
-        reply_markup=month_markup,
+        f"{base_text}\n\nВыбранный период: {year_from}-{year_to}\n\nВыберите ценовой диапазон:",
+        chat_id=chat_id,
+        message_id=message_id,
+        reply_markup=price_markup,
     )
 
 
@@ -1329,54 +1283,83 @@ def handle_month_to_selection(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("mileage_from_"))
 def handle_mileage_from(call):
     mileage_from = int(call.data.split("_")[2])
+    user_id = call.from_user.id
 
-    print(f"✅ DEBUG user_search_data before mileage_from selection:")
-    print(
-        json.dumps(
-            user_search_data.get(call.from_user.id, {}), indent=2, ensure_ascii=False
-        )
-    )
+    if user_id not in user_search_data:
+        user_search_data[user_id] = {}
+
+    # Save the mileage_from in user data
+    user_search_data[user_id]["mileage_from"] = mileage_from
 
     mileage_markup = types.InlineKeyboardMarkup(row_width=4)
     for value in range(mileage_from + 10000, 200001, 10000):
         mileage_markup.add(
             types.InlineKeyboardButton(
-                f"{value} км", callback_data=f"mileage_to_{mileage_from}_{value}"
+                f"{value} км", callback_data=f"mileage_to_{value}"
             )
         )
 
-    bot.send_message(
-        call.message.chat.id,
-        f"Минимальный пробег: {mileage_from} км\nТеперь выберите максимальный пробег:",
-        reply_markup=mileage_markup,
-    )
+    # Get the base text for continuity
+    message_text = call.message.text
+    if "\nЛокация:" in message_text:
+        base_info = message_text.split("\n\nВыберите минимальный пробег:")[0]
+        bot.edit_message_text(
+            f"{base_info}\nМинимальный пробег: {mileage_from} км\n\nВыберите максимальный пробег:",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=mileage_markup,
+        )
+    else:
+        # Fallback
+        bot.edit_message_text(
+            f"{message_text.split('Выберите минимальный пробег:')[0]}\nМинимальный пробег: {mileage_from} км\n\nВыберите максимальный пробег:",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=mileage_markup,
+        )
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("mileage_to_"))
 def handle_mileage_to(call):
-    mileage_from = int(call.data.split("_")[2])
-    mileage_to = int(call.data.split("_")[3])
+    mileage_to = int(call.data.split("_")[2])
+    user_id = call.from_user.id
 
-    print(f"✅ DEBUG user_search_data before mileage_to selection:")
-    print(
-        json.dumps(
-            user_search_data.get(call.from_user.id, {}), indent=2, ensure_ascii=False
-        )
-    )
+    if user_id not in user_search_data:
+        user_search_data[user_id] = {}
 
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    # Добавляем кнопку "Любой цвет"
-    markup.add(types.InlineKeyboardButton("Любой", callback_data="color_all"))
+    # Get the previously selected mileage_from
+    mileage_from = user_search_data[user_id].get("mileage_from", 0)
 
-    # Добавляем остальные цвета
+    # Save the mileage_to in user data
+    user_search_data[user_id]["mileage_to"] = mileage_to
+
+    # Color selection
+    color_markup = types.InlineKeyboardMarkup(row_width=2)
+    # Add "Any color" option
+    color_markup.add(types.InlineKeyboardButton("Любой", callback_data="color_all"))
+
+    # Add all available colors
     for kr, ru in COLOR_TRANSLATIONS.items():
-        markup.add(types.InlineKeyboardButton(ru, callback_data=f"color_{kr}"))
+        color_markup.add(types.InlineKeyboardButton(ru, callback_data=f"color_{kr}"))
 
-    bot.send_message(
-        call.message.chat.id,
-        f"Пробег: от {mileage_from} км до {mileage_to} км\nТеперь выберите цвет автомобиля:",
-        reply_markup=markup,
-    )
+    # Get the base text for continuity
+    message_text = call.message.text
+    if "\nМинимальный пробег:" in message_text:
+        base_info = message_text.split("\n\nВыберите максимальный пробег:")[0]
+        bot.edit_message_text(
+            f"{base_info}\nПробег: {mileage_from}-{mileage_to} км\n\nВыберите цвет автомобиля:",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=color_markup,
+        )
+    else:
+        # Fallback
+        bot.edit_message_text(
+            f"{message_text.split('Выберите максимальный пробег:')[0]}\nПробег: {mileage_from}-{mileage_to} км\n\nВыберите цвет автомобиля:",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=color_markup,
+        )
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("color_"))
@@ -1391,9 +1374,11 @@ def handle_color_selection(call):
 
     user_id = call.from_user.id
     user_data = user_search_data.get(user_id, {})
-    print(f"✅ DEBUG user_data before color selection: {user_data}")
 
-    # Проверяем наличие всех необходимых данных
+    # Save color in user_data
+    user_search_data[user_id]["color"] = selected_color_kr
+
+    # Check required fields
     required_fields = [
         "manufacturer",
         "model_group",
@@ -1419,11 +1404,28 @@ def handle_color_selection(call):
     year_from = user_data["year_from"]
     year_to = user_data["year_to"]
 
+    # Extract mileage data - handle both old and new formats
+    mileage_from = user_data.get("mileage_from", 0)  # Default if not found
+    mileage_to = user_data.get("mileage_to", 200000)  # Default if not found
+
     mileage_line = next(
-        (line for line in message_text.split("\n") if "Пробег:" in line), ""
+        (line for line in message_text.split("\n") if "Пробег:" in line), None
     )
-    mileage_from = int(mileage_line.split("от")[1].split("км")[0].strip())
-    mileage_to = int(mileage_line.split("до")[1].split("км")[0].strip())
+
+    if mileage_line:
+        try:
+            if "от" in mileage_line and "до" in mileage_line:
+                # Old format: "Пробег: от X до Y км"
+                mileage_from = int(mileage_line.split("от")[1].split("км")[0].strip())
+                mileage_to = int(mileage_line.split("до")[1].split("км")[0].strip())
+            elif "-" in mileage_line:
+                # New format: "Пробег: X-Y км"
+                mileage_parts = mileage_line.split("Пробег:")[1].strip().split("-")
+                mileage_from = int(mileage_parts[0].strip())
+                mileage_to = int(mileage_parts[1].split("км")[0].strip())
+        except (ValueError, IndexError) as e:
+            print(f"Error parsing mileage: {e}")
+            # Use values from user_data (already set above)
 
     print("⚙️ Данные для поиска:")
     print(f"manufacturer: {manufacturer}")
@@ -1436,15 +1438,19 @@ def handle_color_selection(call):
     print(f"mileage_from: {mileage_from}")
     print(f"mileage_to: {mileage_to}")
 
-    bot.send_message(
-        call.message.chat.id,
-        "🔍 Начинаем поиск автомобилей по заданным параметрам. Это может занять некоторое время...",
+    # Update the message to show search is starting
+    base_text = ""
+    if "Выберите цвет автомобиля:" in message_text:
+        base_text = message_text.split("Выберите цвет автомобиля:")[0]
+
+    bot.edit_message_text(
+        f"{base_text}Цвет: {selected_color_ru}\n\n"
+        f"🔍 Начинаем поиск автомобилей по заданным параметрам. Это может занять некоторое время...",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
     )
 
-    # Информация о выбранном цвете для пользователя
-    color_info = (
-        "любого цвета" if selected_color_kr == "all" else f"цвета: {selected_color_ru}"
-    )
+    # Send search parameters summary
     bot.send_message(
         call.message.chat.id,
         f"📋 Ваш запрос:\n"
@@ -1455,7 +1461,7 @@ def handle_color_selection(call):
         f"• Цвет: {selected_color_ru}",
     )
 
-    # Кнопки после завершения добавления авто
+    # Buttons for after adding a car
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
         types.InlineKeyboardButton(
@@ -1471,6 +1477,7 @@ def handle_color_selection(call):
         reply_markup=markup,
     )
 
+    # Save to user requests
     if user_id not in user_requests:
         user_requests[user_id] = []
 
@@ -1490,13 +1497,14 @@ def handle_color_selection(call):
 
     save_requests(user_requests)
 
+    # Start search in background thread
     import threading
 
     threading.Thread(
         target=check_for_new_cars,
         args=(
-            call.from_user.id,  # user_id для параметров поиска
-            call.message.chat.id,  # chat_id для отправки сообщений
+            call.from_user.id,
+            call.message.chat.id,
             manufacturer.strip(),
             model_group.strip(),
             model.strip(),
@@ -3843,6 +3851,327 @@ def get_kcar_year_to_keyboard(start_year, end_year):
         )
 
     return year_markup
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "any_price")
+def handle_any_price_selection(call):
+    user_id = call.from_user.id
+    if user_id not in user_search_data:
+        user_search_data[user_id] = {}
+
+    user_search_data[user_id]["min_price"] = 0
+    user_search_data[user_id]["max_price"] = None  # No maximum price limit
+
+    # For Encar source after fixed year selection, update the search params to include month
+    # Set default month values since we're skipping month selection
+    if user_search_data[user_id].get("source") == "encar":
+        user_search_data[user_id]["month_from"] = 1  # January
+        user_search_data[user_id]["month_to"] = 12  # December
+
+    # Continue with location selection
+    location_markup = create_location_markup(
+        user_search_data[user_id].get("source", "encar")
+    )
+
+    message_text = call.message.text
+    location_text = "Выберите локацию:"
+
+    # Check if we need to extract the base text
+    if "\n\nВыбранный период:" in message_text:
+        base_text = message_text.split("\n\nВыбранный период:")[0]
+        year_range = (
+            message_text.split("\n\nВыбранный период:")[1].split("\n\n")[0].strip()
+        )
+        bot.edit_message_text(
+            f"{base_text}\n\nВыбранный период: {year_range}\nЦеновой диапазон: Любая\n\n{location_text}",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=location_markup,
+        )
+    else:
+        # Fallback for other flow paths
+        bot.edit_message_text(
+            f"{message_text}\nЦеновой диапазон: Любая\n\n{location_text}",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=location_markup,
+        )
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("price_max_"))
+def handle_max_price_selection(call):
+    max_price = int(call.data.split("_")[2])
+
+    user_id = call.from_user.id
+    if user_id not in user_search_data:
+        user_search_data[user_id] = {}
+
+    user_search_data[user_id]["min_price"] = 0
+    user_search_data[user_id]["max_price"] = max_price
+
+    # For Encar source after fixed year selection, update the search params to include month
+    # Set default month values since we're skipping month selection
+    if user_search_data[user_id].get("source") == "encar":
+        user_search_data[user_id]["month_from"] = 1  # January
+        user_search_data[user_id]["month_to"] = 12  # December
+
+    # Continue with location selection
+    location_markup = create_location_markup(
+        user_search_data[user_id].get("source", "encar")
+    )
+
+    message_text = call.message.text
+    location_text = "Выберите локацию:"
+
+    # Format price for display
+    formatted_price = f"до {max_price // 1000000} млн ₩"
+
+    # Check if we need to extract the base text
+    if "\n\nВыбранный период:" in message_text:
+        base_text = message_text.split("\n\nВыбранный период:")[0]
+        year_range = (
+            message_text.split("\n\nВыбранный период:")[1].split("\n\n")[0].strip()
+        )
+
+        bot.edit_message_text(
+            f"{base_text}\n\nВыбранный период: {year_range}\nЦеновой диапазон: {formatted_price}\n\n{location_text}",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=location_markup,
+        )
+    else:
+        # Fallback for other flow paths
+        bot.edit_message_text(
+            f"{message_text}\nЦеновой диапазон: {formatted_price}\n\n{location_text}",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=location_markup,
+        )
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "custom_price")
+def handle_custom_price_request(call):
+    user_id = call.from_user.id
+    if user_id not in user_search_data:
+        user_search_data[user_id] = {}
+
+    # For Encar source after fixed year selection, update the search params to include month
+    # Set default month values since we're skipping month selection
+    if user_search_data[user_id].get("source") == "encar":
+        user_search_data[user_id]["month_from"] = 1  # January
+        user_search_data[user_id]["month_to"] = 12  # December
+
+    # Set a flag to indicate we're waiting for custom price input
+    user_search_data[user_id]["awaiting_price_input"] = True
+
+    message_text = call.message.text
+
+    # Check if we need to extract the base text for displaying
+    if "\n\nВыбранный период:" in message_text:
+        base_info = message_text.split("\n\nВыберите ценовой диапазон:")[0]
+        bot.edit_message_text(
+            f"{base_info}\n\nВведите ценовой диапазон в формате 'мин-макс' в миллионах вон.\nНапример: 5-15 (от 5 до 15 млн ₩)\nИли просто максимальную цену, например: 20",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+        )
+    else:
+        # Fallback
+        bot.edit_message_text(
+            f"{message_text.split('Выберите ценовой диапазон:')[0]}\n\nВведите ценовой диапазон в формате 'мин-макс' в миллионах вон.\nНапример: 5-15 (от 5 до 15 млн ₩)\nИли просто максимальную цену, например: 20",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+        )
+
+    # Register next step handler to capture the price input
+    bot.register_next_step_handler(call.message, process_custom_price_input)
+
+
+def process_custom_price_input(message):
+    user_id = message.from_user.id
+    if user_id not in user_search_data or not user_search_data[user_id].get(
+        "awaiting_price_input"
+    ):
+        return
+
+    # Remove the flag
+    user_search_data[user_id].pop("awaiting_price_input", None)
+
+    price_text = message.text.strip()
+
+    try:
+        if "-" in price_text:
+            # Range format: min-max
+            min_price, max_price = price_text.split("-", 1)
+            min_price = int(min_price.strip()) * 1000000
+            max_price = int(max_price.strip()) * 1000000
+        else:
+            # Single value format: max
+            min_price = 0
+            max_price = int(price_text.strip()) * 1000000
+
+        user_search_data[user_id]["min_price"] = min_price
+        user_search_data[user_id]["max_price"] = max_price
+
+        # Display the price range
+        if min_price == 0:
+            price_display = f"до {max_price // 1000000} млн ₩"
+        else:
+            price_display = f"{min_price // 1000000}-{max_price // 1000000} млн ₩"
+
+        # Continue with location selection
+        location_markup = create_location_markup(
+            user_search_data[user_id].get("source", "encar")
+        )
+
+        # Get base text and year range from the stored data to reconstruct the message
+        source = user_search_data[user_id].get("source", "encar")
+        brand = user_search_data[user_id].get("brand", "")
+        model = user_search_data[user_id].get("model", "")
+        generation = user_search_data[user_id].get("generation", "")
+        trim = user_search_data[user_id].get("trim", "")
+        year_from = user_search_data[user_id].get("year_from", "")
+        year_to = user_search_data[user_id].get("year_to", "")
+
+        # Build a new message with the information
+        base_text = f"Марка: {brand}\nМодель: {model}"
+        if generation:
+            base_text += f"\nПоколение: {generation}"
+        if trim:
+            base_text += f"\nКомплектация: {trim}"
+
+        bot.send_message(
+            message.chat.id,
+            f"{base_text}\n\nВыбранный период: {year_from}-{year_to}\nЦеновой диапазон: {price_display}\n\nВыберите локацию:",
+            reply_markup=location_markup,
+        )
+    except ValueError:
+        # Handle invalid input
+        bot.send_message(
+            message.chat.id,
+            "❌ Неверный формат. Пожалуйста, введите цену в правильном формате (например: 5-15 или 20).",
+        )
+        # Restart the custom price flow
+        bot.register_next_step_handler(message, process_custom_price_input)
+
+
+def create_location_markup(source="encar"):
+    """Create location markup depending on source"""
+    location_markup = types.InlineKeyboardMarkup(row_width=2)
+
+    if source == "encar":
+        locations = [
+            ("Любая", "location_all"),
+            ("Сеул", "location_서울"),
+            ("Пусан", "location_부산"),
+            ("Инчхон", "location_인천"),
+            ("Тэгу", "location_대구"),
+            ("Тэджон", "location_대전"),
+            ("Кванджу", "location_광주"),
+            ("Ульсан", "location_울산"),
+            ("Кёнги-до", "location_경기"),
+            ("Канвон-до", "location_강원"),
+            ("Чхунчхон-Пукто", "location_충북"),
+            ("Чхунчхон-Намдо", "location_충남"),
+            ("Чолла-Пукто", "location_전북"),
+            ("Чолла-Намдо", "location_전남"),
+            ("Кёнсан-Пукто", "location_경북"),
+            ("Кёнсан-Намдо", "location_경남"),
+            ("Чеджу-до", "location_제주"),
+        ]
+    elif source == "kbchachacha":
+        # Use KbChaChaCha locations
+        locations = [
+            ("Любая", "kbcha_location_all"),
+            ("Сеул", "kbcha_location_11"),
+            ("Пусан", "kbcha_location_26"),
+            ("Тэгу", "kbcha_location_27"),
+            ("Инчхон", "kbcha_location_28"),
+            ("Кванджу", "kbcha_location_29"),
+            ("Тэджон", "kbcha_location_30"),
+            ("Ульсан", "kbcha_location_31"),
+            ("Седжон", "kbcha_location_36"),
+            ("Кёнги-до", "kbcha_location_41"),
+            ("Канвон-до", "kbcha_location_42"),
+            ("Чхунчхон-Пукто", "kbcha_location_43"),
+            ("Чхунчхон-Намдо", "kbcha_location_44"),
+            ("Чолла-Пукто", "kbcha_location_45"),
+            ("Чолла-Намдо", "kbcha_location_46"),
+            ("Кёнсан-Пукто", "kbcha_location_47"),
+            ("Кёнсан-Намдо", "kbcha_location_48"),
+            ("Чеджу-до", "kbcha_location_49"),
+        ]
+    elif source == "kcar":
+        # Use KCar locations
+        locations = [
+            ("Любая", "kcar_location_all"),
+            ("Сеул", "kcar_location_서울"),
+            ("Пусан", "kcar_location_부산"),
+            ("Тэгу", "kcar_location_대구"),
+            ("Инчхон", "kcar_location_인천"),
+            ("Кванджу", "kcar_location_광주"),
+            ("Тэджон", "kcar_location_대전"),
+            ("Ульсан", "kcar_location_울산"),
+            ("Седжон", "kcar_location_세종"),
+            ("Кёнги-до", "kcar_location_경기"),
+            ("Канвон-до", "kcar_location_강원"),
+            ("Чхунчхон-Пукто", "kcar_location_충북"),
+            ("Чхунчхон-Намдо", "kcar_location_충남"),
+            ("Чолла-Пукто", "kcar_location_전북"),
+            ("Чолла-Намдо", "kcar_location_전남"),
+            ("Кёнсан-Пукто", "kcar_location_경북"),
+            ("Кёнсан-Намдо", "kcar_location_경남"),
+            ("Чеджу-до", "kcar_location_제주"),
+        ]
+
+    for label, callback_data in locations:
+        location_markup.add(
+            types.InlineKeyboardButton(label, callback_data=callback_data)
+        )
+
+    return location_markup
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("location_"))
+def handle_location_selection(call):
+    location_code = call.data.split("_", 1)[1]
+    user_id = call.from_user.id
+
+    # Save the location in user data
+    if user_id not in user_search_data:
+        user_search_data[user_id] = {}
+
+    user_search_data[user_id]["location"] = location_code
+
+    # Now show mileage selection
+    mileage_markup = types.InlineKeyboardMarkup(row_width=4)
+    for value in range(0, 200001, 10000):
+        mileage_markup.add(
+            types.InlineKeyboardButton(
+                f"{value} км", callback_data=f"mileage_from_{value}"
+            )
+        )
+
+    # Get the message text for continuity
+    message_text = call.message.text
+    location_name = "Любая" if location_code == "all" else location_code
+
+    # Build a new message including our location selection
+    if "\nЦеновой диапазон:" in message_text:
+        base_info = message_text.split("\n\nВыберите локацию:")[0]
+        bot.edit_message_text(
+            f"{base_info}\nЛокация: {location_name}\n\nВыберите минимальный пробег:",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=mileage_markup,
+        )
+    else:
+        # Fallback for other flow paths
+        bot.edit_message_text(
+            f"{message_text}\nЛокация: {location_name}\n\nВыберите минимальный пробег:",
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            reply_markup=mileage_markup,
+        )
 
 
 # Запуск бота
