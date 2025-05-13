@@ -1751,7 +1751,7 @@ def check_for_new_cars(
 # Добавленный код для команд userlist и remove_user
 @bot.message_handler(commands=["userlist"])
 def handle_userlist_command(message):
-    if message.from_user.id not in [728438182, 6624693060]:
+    if message.from_user.id not in [728438182, 6624693060, 6526086431]:
         bot.reply_to(message, "❌ У вас нет доступа к этой команде.")
         return
 
@@ -1771,7 +1771,7 @@ def handle_userlist_command(message):
 
 @bot.message_handler(commands=["remove_user"])
 def handle_remove_user(message):
-    if message.from_user.id not in [728438182, 6624693060]:
+    if message.from_user.id not in [728438182, 6624693060, 6526086431]:
         bot.reply_to(message, "❌ У вас нет доступа к этой команде.")
         return
 
