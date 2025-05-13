@@ -1560,14 +1560,21 @@ def build_encar_url(
     # Объявляем переменные сразу для дальнейшего логирования
     month_from = 0
     month_to = 0
+    min_price = None  # Initialize price range variables
+    max_price = None
 
-    # Пытаемся получить месяцы из данных пользователя
+    # Пытаемся получить месяцы и цены из данных пользователя
     if user_id is not None and user_id in user_search_data:
         month_from = user_search_data[user_id].get("month_from", 0)
         month_to = user_search_data[user_id].get("month_to", 0)
+        min_price = user_search_data[user_id].get("min_price")
+        max_price = user_search_data[user_id].get("max_price")
 
         print(
             f"🔧 DEBUG [build_encar_url] - Месяцы из данных пользователя: from={month_from}, to={month_to}"
+        )
+        print(
+            f"🔧 DEBUG [build_encar_url] - Цены из данных пользователя: min={min_price}, max={max_price}"
         )
     else:
         print("🔧 DEBUG [build_encar_url] - Не удалось получить данные пользователя")
@@ -1609,11 +1616,24 @@ def build_encar_url(
     trim_encoded = urllib.parse.quote(trim)
     sell_type_encoded = urllib.parse.quote("일반")
 
+    # Формируем строку для цены
+    price_filter = ""
+    if min_price is not None or max_price is not None:
+        if min_price is not None and max_price is not None:
+            # Оба значения указаны
+            price_filter = f"_.Price.range({min_price//10000}..{max_price//10000})"
+        elif min_price is not None:
+            # Только минимальная цена
+            price_filter = f"_.Price.range({min_price//10000}..)"
+        elif max_price is not None:
+            # Только максимальная цена
+            price_filter = f"_.Price.range(..{max_price//10000})"
+
     # Формируем базовый запрос без фильтра цвета, если цвет не указан
     if not color:
         url = (
             f"https://encar-proxy.habsida.net/api/catalog?count=true&q="
-            f"(And.Hidden.N._.SellType.{sell_type_encoded}._."
+            f"(And.Hidden.N._.SellType.{sell_type_encoded}{price_filter}._."
             f"(C.CarType.A._."
             f"(C.Manufacturer.{manufacturer_encoded}._."
             f"(C.ModelGroup.{model_group_encoded}._."
@@ -1627,7 +1647,7 @@ def build_encar_url(
         color_encoded = urllib.parse.quote(color)
         url = (
             f"https://encar-proxy.habsida.net/api/catalog?count=true&q="
-            f"(And.Hidden.N._.SellType.{sell_type_encoded}._.Color.{color_encoded}._."
+            f"(And.Hidden.N._.SellType.{sell_type_encoded}{price_filter}._.Color.{color_encoded}._."
             f"(C.CarType.A._."
             f"(C.Manufacturer.{manufacturer_encoded}._."
             f"(C.ModelGroup.{model_group_encoded}._."
@@ -3859,8 +3879,9 @@ def handle_any_price_selection(call):
     if user_id not in user_search_data:
         user_search_data[user_id] = {}
 
+    # Set both min and max price to indicate "Any" price range
     user_search_data[user_id]["min_price"] = 0
-    user_search_data[user_id]["max_price"] = None  # No maximum price limit
+    user_search_data[user_id]["max_price"] = None  # None means no upper limit
 
     # For Encar source after fixed year selection, update the search params to include month
     # Set default month values since we're skipping month selection
@@ -3906,6 +3927,7 @@ def handle_max_price_selection(call):
     if user_id not in user_search_data:
         user_search_data[user_id] = {}
 
+    # Set min price to 0 and max price to the selected value
     user_search_data[user_id]["min_price"] = 0
     user_search_data[user_id]["max_price"] = max_price
 
@@ -3961,8 +3983,8 @@ def handle_custom_price_request(call):
         user_search_data[user_id]["month_from"] = 1  # January
         user_search_data[user_id]["month_to"] = 12  # December
 
-    # Set a flag to indicate we're waiting for custom price input
-    user_search_data[user_id]["awaiting_price_input"] = True
+    # Set a flag to indicate we're waiting for starting price input
+    user_search_data[user_id]["awaiting_start_price_input"] = True
 
     message_text = call.message.text
 
@@ -3970,51 +3992,119 @@ def handle_custom_price_request(call):
     if "\n\nВыбранный период:" in message_text:
         base_info = message_text.split("\n\nВыберите ценовой диапазон:")[0]
         bot.edit_message_text(
-            f"{base_info}\n\nВведите ценовой диапазон в формате 'мин-макс' в миллионах вон.\nНапример: 5-15 (от 5 до 15 млн ₩)\nИли просто максимальную цену, например: 20",
+            f"{base_info}\n\nВведите начальную цену в миллионах вон (или введите 'Любой' для отсутствия нижнего предела).\nНапример: 5 (начиная от 5 млн ₩)",
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
         )
     else:
         # Fallback
         bot.edit_message_text(
-            f"{message_text.split('Выберите ценовой диапазон:')[0]}\n\nВведите ценовой диапазон в формате 'мин-макс' в миллионах вон.\nНапример: 5-15 (от 5 до 15 млн ₩)\nИли просто максимальную цену, например: 20",
+            f"{message_text.split('Выберите ценовой диапазон:')[0]}\n\nВведите начальную цену в миллионах вон (или введите 'Любой' для отсутствия нижнего предела).\nНапример: 5 (начиная от 5 млн ₩)",
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
         )
 
-    # Register next step handler to capture the price input
-    bot.register_next_step_handler(call.message, process_custom_price_input)
+    # Register next step handler to capture the starting price input
+    bot.register_next_step_handler(call.message, process_start_price_input)
 
 
-def process_custom_price_input(message):
+def process_start_price_input(message):
     user_id = message.from_user.id
     if user_id not in user_search_data or not user_search_data[user_id].get(
-        "awaiting_price_input"
+        "awaiting_start_price_input"
     ):
         return
 
     # Remove the flag
-    user_search_data[user_id].pop("awaiting_price_input", None)
-
-    price_text = message.text.strip()
+    user_search_data[user_id].pop("awaiting_start_price_input", None)
+    start_price_text = message.text.strip().lower()
 
     try:
-        if "-" in price_text:
-            # Range format: min-max
-            min_price, max_price = price_text.split("-", 1)
-            min_price = int(min_price.strip()) * 1000000
-            max_price = int(max_price.strip()) * 1000000
-        else:
-            # Single value format: max
+        # Check if user entered "любой" or similar variations
+        if start_price_text in ["любой", "любая", "any"]:
             min_price = 0
-            max_price = int(price_text.strip()) * 1000000
+        else:
+            min_price = int(start_price_text) * 1000000
 
+        # Store the min_price
         user_search_data[user_id]["min_price"] = min_price
+
+        # Get base text to maintain continuity
+        source = user_search_data[user_id].get("source", "encar")
+        brand = user_search_data[user_id].get("brand", "")
+        model = user_search_data[user_id].get("model", "")
+        generation = user_search_data[user_id].get("generation", "")
+        trim = user_search_data[user_id].get("trim", "")
+        year_from = user_search_data[user_id].get("year_from", "")
+        year_to = user_search_data[user_id].get("year_to", "")
+
+        # Build a base text with the entered information
+        base_text = f"Марка: {brand}\nМодель: {model}"
+        if generation:
+            base_text += f"\nПоколение: {generation}"
+        if trim:
+            base_text += f"\nКомплектация: {trim}"
+
+        # Set flag for awaiting end price input
+        user_search_data[user_id]["awaiting_end_price_input"] = True
+
+        # Display the min price
+        if min_price == 0:
+            min_display = "Любая"
+        else:
+            min_display = f"{min_price // 1000000} млн ₩"
+
+        # Now ask for the end price
+        bot.send_message(
+            message.chat.id,
+            f"{base_text}\n\nВыбранный период: {year_from}-{year_to}\nНачальная цена: {min_display}\n\nТеперь введите конечную цену в миллионах вон (или введите 'Любой' для отсутствия верхнего предела).\nНапример: 15 (до 15 млн ₩)",
+        )
+
+        # Register next step handler for the ending price
+        bot.register_next_step_handler(message, process_end_price_input)
+
+    except ValueError:
+        # Handle invalid input
+        bot.send_message(
+            message.chat.id,
+            "❌ Неверный формат. Пожалуйста, введите цену в правильном формате (например: 5) или 'Любой'.",
+        )
+        # Restart the price input flow
+        user_search_data[user_id]["awaiting_start_price_input"] = True
+        bot.register_next_step_handler(message, process_start_price_input)
+
+
+def process_end_price_input(message):
+    user_id = message.from_user.id
+    if user_id not in user_search_data or not user_search_data[user_id].get(
+        "awaiting_end_price_input"
+    ):
+        return
+
+    # Remove the flag
+    user_search_data[user_id].pop("awaiting_end_price_input", None)
+    end_price_text = message.text.strip().lower()
+
+    try:
+        # Check if user entered "любой" or similar variations
+        if end_price_text in ["любой", "любая", "any"]:
+            max_price = None  # None means no upper limit
+        else:
+            max_price = int(end_price_text) * 1000000
+
+        # Store the max_price
         user_search_data[user_id]["max_price"] = max_price
 
-        # Display the price range
-        if min_price == 0:
+        # Get min_price for display
+        min_price = user_search_data[user_id].get("min_price", 0)
+
+        # Format the price display
+        if min_price == 0 and max_price is None:
+            price_display = "Любая"
+        elif min_price == 0:
             price_display = f"до {max_price // 1000000} млн ₩"
+        elif max_price is None:
+            price_display = f"от {min_price // 1000000} млн ₩"
         else:
             price_display = f"{min_price // 1000000}-{max_price // 1000000} млн ₩"
 
@@ -4048,10 +4138,11 @@ def process_custom_price_input(message):
         # Handle invalid input
         bot.send_message(
             message.chat.id,
-            "❌ Неверный формат. Пожалуйста, введите цену в правильном формате (например: 5-15 или 20).",
+            "❌ Неверный формат. Пожалуйста, введите цену в правильном формате (например: 15) или 'Любой'.",
         )
-        # Restart the custom price flow
-        bot.register_next_step_handler(message, process_custom_price_input)
+        # Restart the ending price input flow
+        user_search_data[user_id]["awaiting_end_price_input"] = True
+        bot.register_next_step_handler(message, process_end_price_input)
 
 
 def create_location_markup(source="encar"):
