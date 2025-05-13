@@ -17,7 +17,6 @@ build/
 
 # Project specific files
 requests.json
-access.json
 
 # Logs
 *.log
