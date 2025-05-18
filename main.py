@@ -219,14 +219,14 @@ class CarForm(StatesGroup):
 
 
 def get_manufacturers():
-    url = "https://encar-proxy.habsida.net/api/nav?count=true&q=(And.Hidden.N._.SellType.%EC%9D%BC%EB%B0%98._.CarType.A.)&inav=%7CMetadata%7CSort"
+    url = "https://encar-proxy.habsida.net/api/nav?count=true&q=(And.Hidden.N._.CarType.A._.SellType.%EC%9D%BC%EB%B0%98.)&inav=%7CMetadata%7CSort"
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = requests.get(url, headers=headers)
         data = response.json()
         manufacturers = (
             data.get("iNav", {})
-            .get("Nodes", [])[2]
+            .get("Nodes", [])[1]
             .get("Facets", [])[0]
             .get("Refinements", {})
             .get("Nodes", [])[0]

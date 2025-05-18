@@ -1,4 +1,5 @@
 translations = {
+    "캠리": "Camry",
     "어코드": "Accord",
     "이스케이프": "Escape",
     "신형": "New",
