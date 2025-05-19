@@ -3889,13 +3889,19 @@ def handle_any_price_selection(call):
         user_search_data[user_id]["month_from"] = 1  # January
         user_search_data[user_id]["month_to"] = 12  # December
 
-    # Continue with location selection
-    location_markup = create_location_markup(
-        user_search_data[user_id].get("source", "encar")
-    )
+    # Set default location to "all" (skip location selection)
+    user_search_data[user_id]["location"] = "all"
+
+    # Skip location selection, go directly to mileage selection
+    mileage_markup = types.InlineKeyboardMarkup(row_width=4)
+    for value in range(0, 200001, 10000):
+        mileage_markup.add(
+            types.InlineKeyboardButton(
+                f"{value} км", callback_data=f"mileage_from_{value}"
+            )
+        )
 
     message_text = call.message.text
-    location_text = "Выберите локацию:"
 
     # Check if we need to extract the base text
     if "\n\nВыбранный период:" in message_text:
@@ -3904,18 +3910,18 @@ def handle_any_price_selection(call):
             message_text.split("\n\nВыбранный период:")[1].split("\n\n")[0].strip()
         )
         bot.edit_message_text(
-            f"{base_text}\n\nВыбранный период: {year_range}\nЦеновой диапазон: Любая\n\n{location_text}",
+            f"{base_text}\n\nВыбранный период: {year_range}\nЦеновой диапазон: Любая\n\nВыберите минимальный пробег:",
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            reply_markup=location_markup,
+            reply_markup=mileage_markup,
         )
     else:
         # Fallback for other flow paths
         bot.edit_message_text(
-            f"{message_text}\nЦеновой диапазон: Любая\n\n{location_text}",
+            f"{message_text}\nЦеновой диапазон: Любая\n\nВыберите минимальный пробег:",
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            reply_markup=location_markup,
+            reply_markup=mileage_markup,
         )
 
 
@@ -3937,13 +3943,19 @@ def handle_max_price_selection(call):
         user_search_data[user_id]["month_from"] = 1  # January
         user_search_data[user_id]["month_to"] = 12  # December
 
-    # Continue with location selection
-    location_markup = create_location_markup(
-        user_search_data[user_id].get("source", "encar")
-    )
+    # Set default location to "all" (skip location selection)
+    user_search_data[user_id]["location"] = "all"
+
+    # Skip location selection, go directly to mileage selection
+    mileage_markup = types.InlineKeyboardMarkup(row_width=4)
+    for value in range(0, 200001, 10000):
+        mileage_markup.add(
+            types.InlineKeyboardButton(
+                f"{value} км", callback_data=f"mileage_from_{value}"
+            )
+        )
 
     message_text = call.message.text
-    location_text = "Выберите локацию:"
 
     # Format price for display
     formatted_price = f"до {max_price // 1000000} млн ₩"
@@ -3956,18 +3968,18 @@ def handle_max_price_selection(call):
         )
 
         bot.edit_message_text(
-            f"{base_text}\n\nВыбранный период: {year_range}\nЦеновой диапазон: {formatted_price}\n\n{location_text}",
+            f"{base_text}\n\nВыбранный период: {year_range}\nЦеновой диапазон: {formatted_price}\n\nВыберите минимальный пробег:",
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            reply_markup=location_markup,
+            reply_markup=mileage_markup,
         )
     else:
         # Fallback for other flow paths
         bot.edit_message_text(
-            f"{message_text}\nЦеновой диапазон: {formatted_price}\n\n{location_text}",
+            f"{message_text}\nЦеновой диапазон: {formatted_price}\n\nВыберите минимальный пробег:",
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            reply_markup=location_markup,
+            reply_markup=mileage_markup,
         )
 
 
@@ -4095,6 +4107,9 @@ def process_end_price_input(message):
         # Store the max_price
         user_search_data[user_id]["max_price"] = max_price
 
+        # Set default location to "all" (skip location selection)
+        user_search_data[user_id]["location"] = "all"
+
         # Get min_price for display
         min_price = user_search_data[user_id].get("min_price", 0)
 
@@ -4108,10 +4123,14 @@ def process_end_price_input(message):
         else:
             price_display = f"{min_price // 1000000}-{max_price // 1000000} млн ₩"
 
-        # Continue with location selection
-        location_markup = create_location_markup(
-            user_search_data[user_id].get("source", "encar")
-        )
+        # Skip location selection, go directly to mileage selection
+        mileage_markup = types.InlineKeyboardMarkup(row_width=4)
+        for value in range(0, 200001, 10000):
+            mileage_markup.add(
+                types.InlineKeyboardButton(
+                    f"{value} км", callback_data=f"mileage_from_{value}"
+                )
+            )
 
         # Get base text and year range from the stored data to reconstruct the message
         source = user_search_data[user_id].get("source", "encar")
@@ -4131,8 +4150,8 @@ def process_end_price_input(message):
 
         bot.send_message(
             message.chat.id,
-            f"{base_text}\n\nВыбранный период: {year_from}-{year_to}\nЦеновой диапазон: {price_display}\n\nВыберите локацию:",
-            reply_markup=location_markup,
+            f"{base_text}\n\nВыбранный период: {year_from}-{year_to}\nЦеновой диапазон: {price_display}\n\nВыберите минимальный пробег:",
+            reply_markup=mileage_markup,
         )
     except ValueError:
         # Handle invalid input
@@ -4145,124 +4164,8 @@ def process_end_price_input(message):
         bot.register_next_step_handler(message, process_end_price_input)
 
 
-def create_location_markup(source="encar"):
-    """Create location markup depending on source"""
-    location_markup = types.InlineKeyboardMarkup(row_width=2)
-
-    if source == "encar":
-        locations = [
-            ("Любая", "location_all"),
-            ("Сеул", "location_서울"),
-            ("Пусан", "location_부산"),
-            ("Инчхон", "location_인천"),
-            ("Тэгу", "location_대구"),
-            ("Тэджон", "location_대전"),
-            ("Кванджу", "location_광주"),
-            ("Ульсан", "location_울산"),
-            ("Кёнги-до", "location_경기"),
-            ("Канвон-до", "location_강원"),
-            ("Чхунчхон-Пукто", "location_충북"),
-            ("Чхунчхон-Намдо", "location_충남"),
-            ("Чолла-Пукто", "location_전북"),
-            ("Чолла-Намдо", "location_전남"),
-            ("Кёнсан-Пукто", "location_경북"),
-            ("Кёнсан-Намдо", "location_경남"),
-            ("Чеджу-до", "location_제주"),
-        ]
-    elif source == "kbchachacha":
-        # Use KbChaChaCha locations
-        locations = [
-            ("Любая", "kbcha_location_all"),
-            ("Сеул", "kbcha_location_11"),
-            ("Пусан", "kbcha_location_26"),
-            ("Тэгу", "kbcha_location_27"),
-            ("Инчхон", "kbcha_location_28"),
-            ("Кванджу", "kbcha_location_29"),
-            ("Тэджон", "kbcha_location_30"),
-            ("Ульсан", "kbcha_location_31"),
-            ("Седжон", "kbcha_location_36"),
-            ("Кёнги-до", "kbcha_location_41"),
-            ("Канвон-до", "kbcha_location_42"),
-            ("Чхунчхон-Пукто", "kbcha_location_43"),
-            ("Чхунчхон-Намдо", "kbcha_location_44"),
-            ("Чолла-Пукто", "kbcha_location_45"),
-            ("Чолла-Намдо", "kbcha_location_46"),
-            ("Кёнсан-Пукто", "kbcha_location_47"),
-            ("Кёнсан-Намдо", "kbcha_location_48"),
-            ("Чеджу-до", "kbcha_location_49"),
-        ]
-    elif source == "kcar":
-        # Use KCar locations
-        locations = [
-            ("Любая", "kcar_location_all"),
-            ("Сеул", "kcar_location_서울"),
-            ("Пусан", "kcar_location_부산"),
-            ("Тэгу", "kcar_location_대구"),
-            ("Инчхон", "kcar_location_인천"),
-            ("Кванджу", "kcar_location_광주"),
-            ("Тэджон", "kcar_location_대전"),
-            ("Ульсан", "kcar_location_울산"),
-            ("Седжон", "kcar_location_세종"),
-            ("Кёнги-до", "kcar_location_경기"),
-            ("Канвон-до", "kcar_location_강원"),
-            ("Чхунчхон-Пукто", "kcar_location_충북"),
-            ("Чхунчхон-Намдо", "kcar_location_충남"),
-            ("Чолла-Пукто", "kcar_location_전북"),
-            ("Чолла-Намдо", "kcar_location_전남"),
-            ("Кёнсан-Пукто", "kcar_location_경북"),
-            ("Кёнсан-Намдо", "kcar_location_경남"),
-            ("Чеджу-до", "kcar_location_제주"),
-        ]
-
-    for label, callback_data in locations:
-        location_markup.add(
-            types.InlineKeyboardButton(label, callback_data=callback_data)
-        )
-
-    return location_markup
-
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("location_"))
-def handle_location_selection(call):
-    location_code = call.data.split("_", 1)[1]
-    user_id = call.from_user.id
-
-    # Save the location in user data
-    if user_id not in user_search_data:
-        user_search_data[user_id] = {}
-
-    user_search_data[user_id]["location"] = location_code
-
-    # Now show mileage selection
-    mileage_markup = types.InlineKeyboardMarkup(row_width=4)
-    for value in range(0, 200001, 10000):
-        mileage_markup.add(
-            types.InlineKeyboardButton(
-                f"{value} км", callback_data=f"mileage_from_{value}"
-            )
-        )
-
-    # Get the message text for continuity
-    message_text = call.message.text
-    location_name = "Любая" if location_code == "all" else location_code
-
-    # Build a new message including our location selection
-    if "\nЦеновой диапазон:" in message_text:
-        base_info = message_text.split("\n\nВыберите локацию:")[0]
-        bot.edit_message_text(
-            f"{base_info}\nЛокация: {location_name}\n\nВыберите минимальный пробег:",
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            reply_markup=mileage_markup,
-        )
-    else:
-        # Fallback for other flow paths
-        bot.edit_message_text(
-            f"{message_text}\nЛокация: {location_name}\n\nВыберите минимальный пробег:",
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            reply_markup=mileage_markup,
-        )
+# Location selection has been removed
+# Default "all" is set in price handlers
 
 
 # Запуск бота
