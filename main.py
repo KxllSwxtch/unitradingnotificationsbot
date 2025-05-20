@@ -984,12 +984,8 @@ def handle_trim_selection(call):
     year_markup = types.InlineKeyboardMarkup(row_width=4)
 
     # Формируем кнопки с годами для выбора - от 2000 до текущего
-    # Используем шаг в 3 года для более компактного отображения
-    year_range = list(range(start_year, end_year + 1, 3))
-    # Добавляем текущий год, если его нет в диапазоне
-    if current_year not in year_range:
-        year_range.append(current_year)
-        year_range.sort()
+    # Отображаем каждый год без пропусков
+    year_range = list(range(start_year, end_year + 1))
 
     print(
         f"✅ DEBUG [handle_trim_selection] - Формируем кнопки для годов: {year_range}"
@@ -1142,12 +1138,8 @@ def handle_month_from_selection(call):
         )
         year_range = [current_year]
     else:
-        # Используем шаг в 2 года для более компактного отображения, начиная с выбранного года
-        year_range = list(range(year_from, current_year + 1, 2))
-        # Добавляем текущий год, если его нет в диапазоне
-        if current_year not in year_range:
-            year_range.append(current_year)
-            year_range.sort()
+        # Отображаем каждый год от выбранного начального до текущего без пропусков
+        year_range = list(range(year_from, current_year + 1))
 
     print(
         f"✅ DEBUG [handle_month_from_selection] - Предлагаемые годы для выбора to: {list(year_range)}"
@@ -1350,6 +1342,14 @@ def handle_month_to_selection(call):
 def handle_mileage_from(call):
     mileage_from = int(call.data.split("_")[2])
 
+    # Сохраняем выбранный минимальный пробег в данных пользователя
+    user_id = call.from_user.id
+    if user_id not in user_search_data:
+        user_search_data[user_id] = {}
+
+    # Сохраняем минимальный пробег
+    user_search_data[user_id]["mileage_from"] = mileage_from
+
     print(f"✅ DEBUG user_search_data before mileage_from selection:")
     print(
         json.dumps(
@@ -1376,6 +1376,14 @@ def handle_mileage_from(call):
 def handle_mileage_to(call):
     mileage_from = int(call.data.split("_")[2])
     mileage_to = int(call.data.split("_")[3])
+
+    # Сохраняем выбранный максимальный пробег в данных пользователя
+    user_id = call.from_user.id
+    if user_id not in user_search_data:
+        user_search_data[user_id] = {}
+
+    # Сохраняем максимальный пробег
+    user_search_data[user_id]["mileage_to"] = mileage_to
 
     print(f"✅ DEBUG user_search_data before mileage_to selection:")
     print(
@@ -1435,6 +1443,7 @@ def handle_color_selection(call):
     # Сохраняем выбранный цвет
     user_search_data[user_id]["color"] = selected_color_kr
 
+    # Получаем необходимые данные
     manufacturer = user_data["manufacturer"]
     model_group = user_data["model_group"]
     model = user_data["model"]
@@ -1442,11 +1451,40 @@ def handle_color_selection(call):
     year_from = user_data["year_from"]
     year_to = user_data["year_to"]
 
-    mileage_line = next(
-        (line for line in message_text.split("\n") if "Пробег:" in line), ""
-    )
-    mileage_from = int(mileage_line.split("от")[1].split("км")[0].strip())
-    mileage_to = int(mileage_line.split("до")[1].split("км")[0].strip())
+    # Проверяем наличие данных о пробеге в сохраненных данных
+    if "mileage_from" not in user_data or "mileage_to" not in user_data:
+        # Если данных нет, то пытаемся извлечь из сообщения как запасной вариант
+        mileage_line = next(
+            (line for line in message_text.split("\n") if "Пробег:" in line), ""
+        )
+        if mileage_line:
+            try:
+                mileage_from = int(mileage_line.split("от")[1].split("км")[0].strip())
+                mileage_to = int(mileage_line.split("до")[1].split("км")[0].strip())
+                # Сохраняем извлеченные значения
+                user_search_data[user_id]["mileage_from"] = mileage_from
+                user_search_data[user_id]["mileage_to"] = mileage_to
+            except:
+                print(
+                    "⚠️ DEBUG [handle_color_selection] - Ошибка при извлечении пробега из текста"
+                )
+                # Устанавливаем значения по умолчанию
+                mileage_from = 0
+                mileage_to = 100000
+                user_search_data[user_id]["mileage_from"] = mileage_from
+                user_search_data[user_id]["mileage_to"] = mileage_to
+        else:
+            print(
+                "⚠️ DEBUG [handle_color_selection] - Не найдена информация о пробеге, устанавливаем значения по умолчанию"
+            )
+            mileage_from = 0
+            mileage_to = 100000
+            user_search_data[user_id]["mileage_from"] = mileage_from
+            user_search_data[user_id]["mileage_to"] = mileage_to
+    else:
+        # Используем сохраненные данные
+        mileage_from = user_data["mileage_from"]
+        mileage_to = user_data["mileage_to"]
 
     print("⚙️ Данные для поиска:")
     print(f"manufacturer: {manufacturer}")
@@ -3940,6 +3978,19 @@ def handle_price_to_selection(call):
 
     # Получаем сохраненные данные пользователя
     user_data = user_search_data[user_id]
+
+    # Проверяем наличие всех необходимых данных и устанавливаем значения по умолчанию если отсутствуют
+    if "mileage_from" not in user_data:
+        print(
+            "⚠️ DEBUG [handle_price_to_selection] - mileage_from отсутствует, устанавливаем по умолчанию 0"
+        )
+        user_data["mileage_from"] = 0
+
+    if "mileage_to" not in user_data:
+        print(
+            "⚠️ DEBUG [handle_price_to_selection] - mileage_to отсутствует, устанавливаем по умолчанию 100000"
+        )
+        user_data["mileage_to"] = 100000
 
     manufacturer = user_data["manufacturer"]
     model_group = user_data["model_group"]
