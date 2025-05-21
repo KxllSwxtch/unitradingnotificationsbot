@@ -123,9 +123,24 @@ state_storage = StateMemoryStorage()
 bot = telebot.TeleBot(BOT_TOKEN, state_storage=state_storage)
 user_search_data = {}
 
+# Загружаем список пользователей с доступом сразу при старте
+ACCESS = load_access()
+print(f"📋 Загружен список доступа: {ACCESS}")
+
 
 # Проверка на то может ли человек пользоваться ботом или нет
 def is_authorized(user_id):
+    global ACCESS
+
+    # Добавляем список фиксированных ID пользователей, которые всегда имеют доступ
+    always_allowed = [728438182, 6624693060, 6526086431]
+
+    # Если пользователь в списке always_allowed, но его нет в ACCESS, добавляем
+    if user_id in always_allowed and user_id not in ACCESS:
+        ACCESS.add(user_id)
+        save_access()
+        print(f"✅ Пользователь {user_id} автоматически добавлен в список доступа")
+
     return user_id in ACCESS
 
 
@@ -436,6 +451,10 @@ def process_user_id_input(message):
 
 @bot.callback_query_handler(func=lambda call: call.data == "start")
 def handle_start_callback(call):
+    if not is_authorized(call.from_user.id):
+        bot.answer_callback_query(call.id, "❌ У вас нет доступа к этому боту.")
+        return
+
     start_handler(call.message)
 
 
@@ -454,11 +473,18 @@ def handle_my_requests(call):
         return
 
     for idx, req in enumerate(requests_list, 1):
+        # Проверяем наличие необходимых ключей и используем значения по умолчанию
+        year_from = req.get("year_from", "Н/Д")
+        year_to = req.get("year_to", "Н/Д")
+        mileage_from = req.get("mileage_from", "Н/Д")
+        mileage_to = req.get("mileage_to", "Н/Д")
+        color = req.get("color", "Н/Д")
+
         text = (
             f"📌 *Запрос #{idx}:*\n"
-            f"{req['manufacturer']} / {req['model_group']} / {req['model']} / {req['trim']}\n"
-            f"Год: {req['year']}, Пробег: {req['mileage_from']}–{req['mileage_to']} км\n"
-            f"Цвет: {req['color']}"
+            f"{req.get('manufacturer', 'Н/Д')} / {req.get('model_group', 'Н/Д')} / {req.get('model', 'Н/Д')} / {req.get('trim', 'Н/Д')}\n"
+            f"Год: {year_from}-{year_to}, Пробег: {mileage_from}–{mileage_to} км\n"
+            f"Цвет: {color}"
         )
 
         markup = types.InlineKeyboardMarkup()
@@ -1735,7 +1761,7 @@ def check_for_new_cars(
                         f"\n🔧 Опции: {options_text}" if options_text else ""
                     )
 
-                    extra_text = f"\n⛽ Топливо: {fuel_type}\n🔄 Трансмиссия: {transmission}\n🏎️ Объём двигателя: {displacement}cc{options_display}\n\n👉 <a href='https://fem.encar.com/cars/detail/{car['Id']}'>Ссылка на автомобиль</a>"
+                    extra_text = f"\n🏎️ Объём двигателя: {displacement}cc{options_display}\n\n👉 <a href='https://fem.encar.com/cars/detail/{car['Id']}'>Ссылка на автомобиль</a>"
                 else:
                     extra_text = "\nℹ️ Не удалось получить подробности о машине."
 
@@ -4106,5 +4132,4 @@ if __name__ == "__main__":
     print("✅ Запросы успешно загружены.")
     print("🤖 Бот запущен и ожидает команды...")
     print("=" * 50)
-    ACCESS = load_access()
     bot.infinity_polling()
