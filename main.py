@@ -21,6 +21,9 @@ ACCESS_FILE = "access.json"
 # Глобальный словарь всех запросов пользователей
 user_requests = {}
 
+# Множество для отслеживания уже проверенных автомобилей
+checked_ids = set()
+
 # Словарь переводов цветов для KbChaChaCha
 KBCHACHA_COLOR_TRANSLATIONS = {
     "검정색": {"ru": "Чёрный", "code": "006001"},
@@ -1571,9 +1574,6 @@ def handle_model(message):
     bot.set_state(message.from_user.id, CarForm.generation, message.chat.id)
 
 
-checked_ids = set()
-
-
 def build_encar_url(
     manufacturer,
     model_group,
@@ -1633,50 +1633,115 @@ def build_encar_url(
         f"🔧 DEBUG [build_encar_url] - Отформатированные даты: от {year_from_formatted} до {year_to_formatted}"
     )
 
-    # Подготавливаем имя модели - добавляем '_' после кода модели
+    # Подготавливаем имя модели - добавляем '_' после кода модели, используем + для пробелов
     if "(" in model and ")" in model:
         base_name, code_part = model.rsplit("(", 1)
         code = code_part.rstrip(")")
         # Убираем пробелы перед скобкой для соответствия формату API
         base_name = base_name.rstrip()
-        model_formatted = f"{base_name}({code}_)"
+        model_formatted = f"{base_name}+({code}_)"
     else:
-        model_formatted = model
+        model_formatted = model.replace(" ", "+")
 
-    # Используем urllib.parse.quote только для отдельных значений,
-    # оставляя структурные элементы (скобки, точки) как есть
-    manufacturer_encoded = urllib.parse.quote(manufacturer)
-    model_group_encoded = urllib.parse.quote(model_group)
-    model_formatted_encoded = urllib.parse.quote(model_formatted)
-    trim_encoded = urllib.parse.quote(trim)
-    sell_type_encoded = urllib.parse.quote("일반")
+    # Обрабатываем trim (BadgeGroup), используем + для пробелов
+    trim_formatted = trim.replace(" ", "+")
 
-    # Начинаем строить базовую часть URL
-    url_parts = [
-        f"(And.Hidden.N._.SellType.{sell_type_encoded}._.",
-        f"(C.CarType.A._.",
-        f"(C.Manufacturer.{manufacturer_encoded}._.",
-        f"(C.ModelGroup.{model_group_encoded}._.",
-        f"(C.Model.{model_formatted_encoded}._.BadgeGroup.{trim_encoded}.))))_.",
-        f"Year.range({year_from_formatted}..{year_to_formatted})._.",
-        f"Mileage.range({mileage_from}..{mileage_to})",
+    # Создаем более реалистичный Badge из trim
+    # Извлекаем ключевые части из trim для Badge
+    if "가솔린" in trim and "cc" in trim:
+        # Для бензиновых двигателей: например "1.6 터보" из "가솔린 1600cc"
+        cc_part = trim.replace("가솔린", "").replace("cc", "").strip()
+        if cc_part == "1600":
+            badge_formatted = "1_.6+터보"
+        elif cc_part == "2000":
+            badge_formatted = "2_.0+가솔린"
+        else:
+            badge_formatted = trim_formatted.replace(".", "_.").replace(" ", "+")
+    else:
+        badge_formatted = trim_formatted.replace(".", "_.").replace(" ", "+")
+
+    # Кодируем только корейские символы, оставляя + и другие ASCII символы
+    def safe_quote(text):
+        # Кодируем только не-ASCII символы
+        result = ""
+        for char in text:
+            if ord(char) > 127:  # Не-ASCII символ (корейский)
+                result += urllib.parse.quote(char)
+            else:
+                result += char
+        return result
+
+    manufacturer_encoded = safe_quote(manufacturer)
+    model_group_encoded = safe_quote(model_group)
+    model_formatted_encoded = safe_quote(model_formatted)
+    trim_encoded = safe_quote(trim_formatted)
+    badge_encoded = safe_quote(badge_formatted)
+    sell_type_encoded = safe_quote("일반")
+
+    # Строим правильную структуру URL согласно рабочим примерам
+    # Вариант 1: SellType снаружи (как в примере 1) - если есть цвет
+    # Вариант 2: SellType внутри (как в примерах 2,3) - если нет цвета или есть только цвет
+
+    # Внутренний And блок с фильтрами
+    inner_filters = [
+        f"Year.range({year_from_formatted}..{year_to_formatted})",
+        f"._.Mileage.range({mileage_from}..{mileage_to})",
     ]
 
-    # Добавляем фильтр по цене, если он указан
+    # Добавляем фильтр по цене, если указан
     if price_from is not None and price_to is not None:
-        url_parts.append(f"_.Price.range({price_from}..{price_to})")
+        inner_filters.append(f"._.Price.range({price_from}..{price_to})")
+    elif price_from is not None:
+        inner_filters.append(f"._.Price.range({price_from}..)")
+    elif price_to is not None:
+        inner_filters.append(f"._.Price.range(..{price_to})")
 
-    # Добавляем фильтр по цвету, если он указан
-    if color:
-        color_encoded = urllib.parse.quote(color)
-        url_parts.insert(
-            1, f"Color.{color_encoded}_."
-        )  # Вставляем после первого элемента
+    inner_filters.append("._.Hidden.N")
+
+    # Проверяем, есть ли цвет
+    has_color = color and color.strip()
+
+    if has_color:
+        # Если есть цвет, используем структуру как в примере 1: SellType снаружи
+        # Иерархия автомобиля
+        car_hierarchy = (
+            f"._.(C.CarType.A._."
+            f"(C.Manufacturer.{manufacturer_encoded}._."
+            f"(C.ModelGroup.{model_group_encoded}._."
+            f"(C.Model.{model_formatted_encoded}._."
+            f"(C.BadgeGroup.{trim_encoded}._.Badge.{badge_encoded}.)))))"
+        )
+
+        inner_and = f"(And.{''.join(inner_filters)}{car_hierarchy})"
+
+        # Внешние фильтры
+        color_encoded = safe_quote(color)
+        outer_filters = f"_.SellType.{sell_type_encoded}._.Color.{color_encoded}."
+
+        # Финальная структура БЕЗ _.AdType.A.
+        query = f"(And.{inner_and}{outer_filters})"
+
+    else:
+        # Если нет цвета, используем структуру как в примере 2: SellType внутри
+        inner_filters.append(f"._.SellType.{sell_type_encoded}")
+
+        # Иерархия автомобиля
+        car_hierarchy = (
+            f"._.(C.CarType.A._."
+            f"(C.Manufacturer.{manufacturer_encoded}._."
+            f"(C.ModelGroup.{model_group_encoded}._."
+            f"(C.Model.{model_formatted_encoded}._."
+            f"(C.BadgeGroup.{trim_encoded}._.Badge.{badge_encoded}.)))))"
+        )
+
+        inner_and = f"(And.{''.join(inner_filters)}{car_hierarchy})"
+
+        # Финальная структура БЕЗ _.AdType.A.
+        query = f"(And.{inner_and})"
 
     # Формируем окончательный URL
     url = (
-        f"https://encar-proxy.habsida.net/api/catalog?count=true&q="
-        f"{''.join(url_parts)}.)"
+        f"https://encar-proxy.habsida.net/api/catalog?count=true&q={query}"
         f"&sr=%7CModifiedDate%7C0%7C1"
     )
 
