@@ -1633,32 +1633,19 @@ def build_encar_url(
         f"🔧 DEBUG [build_encar_url] - Отформатированные даты: от {year_from_formatted} до {year_to_formatted}"
     )
 
-    # Подготавливаем имя модели - добавляем '_' после кода модели, используем + для пробелов
+    # Подготавливаем имя модели в соответствии с рабочим примером
+    # Используем + для пробелов, но НЕ добавляем + перед скобкой
     if "(" in model and ")" in model:
         base_name, code_part = model.rsplit("(", 1)
         code = code_part.rstrip(")")
-        # Убираем пробелы перед скобкой для соответствия формату API
-        base_name = base_name.rstrip()
-        model_formatted = f"{base_name}+({code}_)"
+        # Заменяем пробелы на +, но НЕ добавляем + перед скобкой
+        base_name = base_name.strip()
+        model_formatted = f"{base_name.replace(' ', '+')}({code}_)"
     else:
         model_formatted = model.replace(" ", "+")
 
     # Обрабатываем trim (BadgeGroup), используем + для пробелов
     trim_formatted = trim.replace(" ", "+")
-
-    # Создаем более реалистичный Badge из trim
-    # Извлекаем ключевые части из trim для Badge
-    if "가솔린" in trim and "cc" in trim:
-        # Для бензиновых двигателей: например "1.6 터보" из "가솔린 1600cc"
-        cc_part = trim.replace("가솔린", "").replace("cc", "").strip()
-        if cc_part == "1600":
-            badge_formatted = "1_.6+터보"
-        elif cc_part == "2000":
-            badge_formatted = "2_.0+가솔린"
-        else:
-            badge_formatted = trim_formatted.replace(".", "_.").replace(" ", "+")
-    else:
-        badge_formatted = trim_formatted.replace(".", "_.").replace(" ", "+")
 
     # Кодируем только корейские символы, оставляя + и другие ASCII символы
     def safe_quote(text):
@@ -1675,69 +1662,49 @@ def build_encar_url(
     model_group_encoded = safe_quote(model_group)
     model_formatted_encoded = safe_quote(model_formatted)
     trim_encoded = safe_quote(trim_formatted)
-    badge_encoded = safe_quote(badge_formatted)
-    sell_type_encoded = safe_quote("일반")
 
-    # Строим правильную структуру URL согласно рабочим примерам
-    # Вариант 1: SellType снаружи (как в примере 1) - если есть цвет
-    # Вариант 2: SellType внутри (как в примерах 2,3) - если нет цвета или есть только цвет
+    # Строим URL в соответствии с РАБОЧЕЙ структурой:
+    # (And.(And.Hidden.N._.(C.CarType.A._.(C.Manufacturer._.(C.ModelGroup._.(C.Model._.BadgeGroup.))))_.Year.range()._.Mileage.range())_.AdType.A.)
 
-    # Внутренний And блок с фильтрами
-    inner_filters = [
-        f"Year.range({year_from_formatted}..{year_to_formatted})",
-        f"._.Mileage.range({mileage_from}..{mileage_to})",
+    # Внутренний And блок: СНАЧАЛА иерархия машины, БЕЗ SellType и Badge
+    car_hierarchy = (
+        f"Hidden.N._.(C.CarType.A._."
+        f"(C.Manufacturer.{manufacturer_encoded}._."
+        f"(C.ModelGroup.{model_group_encoded}._."
+        f"(C.Model.{model_formatted_encoded}._.BadgeGroup.{trim_encoded}.))))"
+    )
+
+    # Фильтры по году и пробегу идут ПОСЛЕ иерархии
+    filters = [
+        f"_.Year.range({year_from_formatted}..{year_to_formatted})",
     ]
+
+    # Пробег: если mileage_from = 0, то используем формат "..максимум" как в рабочем примере
+    if mileage_from == 0 or mileage_from is None:
+        filters.append(f"._.Mileage.range(..{mileage_to})")
+    else:
+        filters.append(f"._.Mileage.range({mileage_from}..{mileage_to})")
 
     # Добавляем фильтр по цене, если указан
     if price_from is not None and price_to is not None:
-        inner_filters.append(f"._.Price.range({price_from}..{price_to})")
+        filters.append(f"._.Price.range({price_from}..{price_to})")
     elif price_from is not None:
-        inner_filters.append(f"._.Price.range({price_from}..)")
+        filters.append(f"._.Price.range({price_from}..)")
     elif price_to is not None:
-        inner_filters.append(f"._.Price.range(..{price_to})")
+        filters.append(f"._.Price.range(..{price_to})")
 
-    inner_filters.append("._.Hidden.N")
+    # Собираем внутренний And блок
+    inner_and = f"(And.{car_hierarchy}{''.join(filters)}.)"
 
-    # Проверяем, есть ли цвет
-    has_color = color and color.strip()
-
-    if has_color:
-        # Если есть цвет, используем структуру как в примере 1: SellType снаружи
-        # Иерархия автомобиля
-        car_hierarchy = (
-            f"._.(C.CarType.A._."
-            f"(C.Manufacturer.{manufacturer_encoded}._."
-            f"(C.ModelGroup.{model_group_encoded}._."
-            f"(C.Model.{model_formatted_encoded}._."
-            f"(C.BadgeGroup.{trim_encoded}._.Badge.{badge_encoded}.)))))"
-        )
-
-        inner_and = f"(And.{''.join(inner_filters)}{car_hierarchy})"
-
-        # Внешние фильтры
+    # Добавляем цвет если есть (как отдельный фильтр снаружи)
+    if color and color.strip():
         color_encoded = safe_quote(color)
-        outer_filters = f"_.SellType.{sell_type_encoded}._.Color.{color_encoded}."
-
-        # Финальная структура БЕЗ _.AdType.A.
-        query = f"(And.{inner_and}{outer_filters})"
-
+        color_filter = f"_.Color.{color_encoded}"
     else:
-        # Если нет цвета, используем структуру как в примере 2: SellType внутри
-        inner_filters.append(f"._.SellType.{sell_type_encoded}")
+        color_filter = ""
 
-        # Иерархия автомобиля
-        car_hierarchy = (
-            f"._.(C.CarType.A._."
-            f"(C.Manufacturer.{manufacturer_encoded}._."
-            f"(C.ModelGroup.{model_group_encoded}._."
-            f"(C.Model.{model_formatted_encoded}._."
-            f"(C.BadgeGroup.{trim_encoded}._.Badge.{badge_encoded}.)))))"
-        )
-
-        inner_and = f"(And.{''.join(inner_filters)}{car_hierarchy})"
-
-        # Финальная структура БЕЗ _.AdType.A.
-        query = f"(And.{inner_and})"
+    # Финальная структура - ВОЗВРАЩАЕМ _.AdType.A. как в рабочем примере!
+    query = f"(And.{inner_and}{color_filter}_.AdType.A.)"
 
     # Формируем окончательный URL
     url = (

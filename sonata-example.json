@@ -1,0 +1,59 @@
+{
+  "Count": 14,
+  "SearchResults": [
+    {
+      "Id": "39651054",
+      "Separation": ["B"],
+      "Trust": ["HomeService"],
+      "ServiceMark": ["EncarMeetgo", "EncarDiagnosisP1"],
+      "Condition": ["Inspection", "InspectionDirect", "Record", "Resume"],
+      "Photo": "/carpicture04/pic3964/39648901_",
+      "Photos": [
+        {
+          "type": "001",
+          "location": "/carpicture04/pic3964/39648901_001.jpg",
+          "updatedDate": "2025-05-15T06:38:15Z",
+          "ordering": 1
+        },
+        {
+          "type": "003",
+          "location": "/carpicture04/pic3964/39648901_003.jpg",
+          "updatedDate": "2025-05-15T06:38:15Z",
+          "ordering": 3
+        },
+        {
+          "type": "004",
+          "location": "/carpicture04/pic3964/39648901_004.jpg",
+          "updatedDate": "2025-05-15T06:38:15Z",
+          "ordering": 4
+        },
+        {
+          "type": "007",
+          "location": "/carpicture04/pic3964/39648901_007.jpg",
+          "updatedDate": "2025-05-15T06:38:15Z",
+          "ordering": 7
+        }
+      ],
+      "Manufacturer": "현대",
+      "Model": "쏘나타 디 엣지(DN8)",
+      "Badge": "1.6 터보",
+      "BadgeDetail": "인스퍼레이션",
+      "Transmission": "오토",
+      "FuelType": "가솔린",
+      "Year": 202502,
+      "FormYear": "2025",
+      "Mileage": 4871,
+      "Powerpack": "준신차급!/1인소유/보험이력X/당일출고/전액할부가능/8일환불제",
+      "Hotmark": "11;19;26",
+      "HomeServiceVerification": "Y",
+      "ServiceCopyCar": "DUPLICATION",
+      "Price": 3450,
+      "SellType": "일반",
+      "BuyType": ["Delivery"],
+      "ModifiedDate": "2025-06-05 10:39:05.000 +09",
+      "OfficeCityState": "경기",
+      "OfficeName": "오토플러스(주)",
+      "DealerName": "리본카 일산지점3"
+    }
+  ]
+}
