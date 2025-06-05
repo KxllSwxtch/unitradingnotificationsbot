@@ -129,6 +129,8 @@ user_search_data = {}
 # Загружаем список пользователей с доступом сразу при старте
 ACCESS = load_access()
 print(f"📋 Загружен список доступа: {ACCESS}")
+print(f"📊 Тип ACCESS: {type(ACCESS)}")
+print(f"🔢 Количество пользователей в ACCESS: {len(ACCESS)}")
 
 
 # Проверка на то может ли человек пользоваться ботом или нет
@@ -138,13 +140,21 @@ def is_authorized(user_id):
     # Добавляем список фиксированных ID пользователей, которые всегда имеют доступ
     always_allowed = [728438182, 6624693060, 6526086431]
 
+    print(
+        f"🔍 DEBUG [is_authorized] - Проверка доступа для user_id: {user_id} (тип: {type(user_id)})"
+    )
+    print(f"🔍 DEBUG [is_authorized] - Always allowed: {always_allowed}")
+    print(f"🔍 DEBUG [is_authorized] - ACCESS: {ACCESS}")
+
     # Если пользователь в списке always_allowed, но его нет в ACCESS, добавляем
     if user_id in always_allowed and user_id not in ACCESS:
         ACCESS.add(user_id)
         save_access()
         print(f"✅ Пользователь {user_id} автоматически добавлен в список доступа")
 
-    return user_id in ACCESS
+    result = user_id in ACCESS
+    print(f"🔍 DEBUG [is_authorized] - Результат проверки: {result}")
+    return result
 
 
 def translate_phrase(phrase):
@@ -454,10 +464,25 @@ def process_user_id_input(message):
 
 @bot.callback_query_handler(func=lambda call: call.data == "start")
 def handle_start_callback(call):
-    if not is_authorized(call.from_user.id):
+    user_id = call.from_user.id
+
+    # Отладочный вывод для диагностики проблемы доступа
+    print(
+        f"🔍 DEBUG [handle_start_callback] - User ID: {user_id} (тип: {type(user_id)})"
+    )
+    print(f"🔍 DEBUG [handle_start_callback] - ACCESS содержит: {ACCESS}")
+    print(f"🔍 DEBUG [handle_start_callback] - user_id в ACCESS: {user_id in ACCESS}")
+
+    if not is_authorized(user_id):
+        print(
+            f"❌ DEBUG [handle_start_callback] - Доступ запрещен для пользователя {user_id}"
+        )
         bot.answer_callback_query(call.id, "❌ У вас нет доступа к этому боту.")
         return
 
+    print(
+        f"✅ DEBUG [handle_start_callback] - Доступ разрешен для пользователя {user_id}"
+    )
     start_handler(call.message)
 
 
