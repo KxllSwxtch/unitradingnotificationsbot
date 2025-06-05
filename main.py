@@ -1704,7 +1704,7 @@ def build_encar_url(
         color_filter = ""
 
     # Финальная структура - ВОЗВРАЩАЕМ _.AdType.A. как в рабочем примере!
-    query = f"(And.{inner_and}{color_filter}_.AdType.A.)"
+    query = f"(And.{inner_and}{color_filter})"
 
     # Формируем окончательный URL
     url = (
